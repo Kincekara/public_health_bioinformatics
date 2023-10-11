@@ -52,7 +52,18 @@ task prune_table {
     table = table[table["~{table_name}_id"].isin("~{sep='*' sample_names}".split("*"))]
 
     # set required and optional metadata fields based on the biosample_type package
-    if ("~{biosample_type}".lower() == "microbe"):
+    if ("~{biosample_type}" == "ARLN"):
+      required_metadata = ["submission_id", "organism", "collection_date", "geo_loc_name", "sample_type"]
+      optional_metadata = ["sample_title", "bioproject_accession", "attribute_package", "strain", "isolate", "host", "isolation_source", "altitude", "biomaterial_provider", "collected_by", "depth", "env_broad_scale", "genotype", "host_tissue_sampled", "identified_by", "lab_host", "lat_lon", "mating_type", "passage_history", "samp_size", "serotype", "serovar", "specimen_voucher", "temp", "description", "MLST"]
+      # add a column for biosample package -- required for XML submission
+      table["attribute_package"] = "Microbe.1.0"
+      table["isolate"] = table["submission_id"]
+      table["host"] = "Homo sapiens"
+      table["geo_loc_name"] = "USA"
+      table["sample_type"] = "whole organism"
+      table["MLST"] = np.where(table["mlst"] =! "No ST predicted", "ML" + table["mlst"].astype(str), '' )
+  
+    elif ("~{biosample_type}".lower() == "microbe"):
       required_metadata = ["submission_id", "organism", "collection_date", "geo_loc_name", "sample_type"]
       optional_metadata = ["sample_title", "bioproject_accession", "attribute_package", "strain", "isolate", "host", "isolation_source", "altitude", "biomaterial_provider", "collected_by", "depth", "env_broad_scale", "genotype", "host_tissue_sampled", "identified_by", "lab_host", "lat_lon", "mating_type", "passage_history", "samp_size", "serotype", "serovar", "specimen_voucher", "temp", "description", "MLST"]
       # add a column for biosample package -- required for XML submission
@@ -107,7 +118,7 @@ task prune_table {
 
 
     else:
-      raise Exception('Only "Microbe", "Virus", "Pathogen" and "Wastewater" are supported as acceptable input for the \`biosample_type\` variable at this time. You entered ~{biosample_type}.')
+      raise Exception('Only "ARLN", "Microbe", "Virus", "Pathogen" and "Wastewater" are supported as acceptable input for the \`biosample_type\` variable at this time. You entered ~{biosample_type}.')
 
     # sra metadata is the same regardless of biosample_type package, but I'm separating it out in case we find out this is incorrect
     sra_required = ["~{table_name}_id", "submission_id", "library_ID", "title", "library_strategy", "library_source", "library_selection", "library_layout", "platform", "instrument_model", "design_description", "filetype", "~{read1_column_name}"]
@@ -129,6 +140,18 @@ task prune_table {
     # add bioproject_accesion to table
     table["bioproject_accession"] = "~{bioproject}"
     
+    # add required common fields to table
+    table["library_ID"] = table["submission_id"]
+    table["title"] = "Illumina sequencing of " + table["title"].astype(str)
+    table["library_strategy"] = "WGS"
+    table["library_source"] = "GENOMIC"
+    table["library_selection"] = "RANDOM"
+    table["library_layout"] = "paired"
+    table["platform"] = "ILLUMINA"
+    table["instrument_model"] = "Illumina MiSeq"
+    table["design_description"] = "Illumina MiSeq (V2) paired-end 2x150 reads"
+    table["filetype"] = "fastq"
+
     # extract the required metadata from the table
     biosample_metadata = table[required_metadata].copy()
 
