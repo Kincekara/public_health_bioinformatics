@@ -13,6 +13,8 @@ task prune_table {
     Boolean skip_biosample
     String read1_column_name = "read1"
     String read2_column_name = "read2"
+    String submission_id_column_name
+    String organism_column_name
   }
   command <<<
     # when running on terra, comment out all input_table mentions
@@ -37,7 +39,7 @@ task prune_table {
     def remove_nas(table, required_metadata):
       table.replace(r'^\s+$', np.nan, regex=True) # replace blank cells with NaNs 
       excluded_samples = table[table[required_metadata].isna().any(axis=1)] # write out all rows that are required with NaNs to a new table
-      excluded_samples.set_index("~{table_name}_id".lower(), inplace=True) # convert the sample names to the index so we can determine what samples are missing what
+      excluded_samples.set_index("~{table_name}_id", inplace=True) # convert the sample names to the index so we can determine what samples are missing what
       excluded_samples = excluded_samples[excluded_samples.columns.intersection(required_metadata)] # remove all optional columns so only required columns are shown
       excluded_samples = excluded_samples.loc[:, excluded_samples.isna().any()] # remove all NON-NA columns so only columns with NAs remain; Shelly is a wizard and I love her 
       table.dropna(subset=required_metadata, axis=0, how='any', inplace=True) # remove all rows that are required with NaNs from table
@@ -57,11 +59,24 @@ task prune_table {
       optional_metadata = ["sample_title", "bioproject_accession", "attribute_package", "strain", "isolate", "host", "isolation_source", "altitude", "biomaterial_provider", "collected_by", "depth", "env_broad_scale", "genotype", "host_tissue_sampled", "identified_by", "lab_host", "lat_lon", "mating_type", "passage_history", "samp_size", "serotype", "serovar", "specimen_voucher", "temp", "description", "MLST"]
       # add a column for biosample package -- required for XML submission
       table["attribute_package"] = "Microbe.1.0"
-      table["isolate"] = table["submission_id"]
+      # create required columns from exixting data and populate common information
+      table["submission_id"] = table["~{submission_id_column_name}"]
+      table["organism"] = table["~{organism_column_name}"]
+      table["isolate"] = table["~{submission_id_column_name}"]
       table["host"] = "Homo sapiens"
       table["geo_loc_name"] = "USA"
       table["sample_type"] = "whole organism"
-      table["MLST"] = np.where(table["mlst"] =! "No ST predicted", "ML" + table["mlst"].astype(str), '' )
+      table["MLST"] = np.where(table["mlst"] != "No ST predicted", "ML" + table["mlst"].astype(str), '' )      
+      table["library_ID"] = table["~{submission_id_column_name}"]
+      table["title"] = "Illumina sequencing of " + table["submission_id"].astype(str)
+      table["library_strategy"] = "WGS"
+      table["library_source"] = "GENOMIC"
+      table["library_selection"] = "RANDOM"
+      table["library_layout"] = "paired"
+      table["platform"] = "ILLUMINA"
+      table["instrument_model"] = "Illumina MiSeq"
+      table["design_description"] = "Illumina MiSeq (V2) paired-end 2x150 reads"
+      table["filetype"] = "fastq"
   
     elif ("~{biosample_type}".lower() == "microbe"):
       required_metadata = ["submission_id", "organism", "collection_date", "geo_loc_name", "sample_type"]
@@ -140,19 +155,7 @@ task prune_table {
     # add bioproject_accesion to table
     table["bioproject_accession"] = "~{bioproject}"
     
-    # add required common fields to table
-    table["library_ID"] = table["submission_id"]
-    table["title"] = "Illumina sequencing of " + table["title"].astype(str)
-    table["library_strategy"] = "WGS"
-    table["library_source"] = "GENOMIC"
-    table["library_selection"] = "RANDOM"
-    table["library_layout"] = "paired"
-    table["platform"] = "ILLUMINA"
-    table["instrument_model"] = "Illumina MiSeq"
-    table["design_description"] = "Illumina MiSeq (V2) paired-end 2x150 reads"
-    table["filetype"] = "fastq"
-
-    # extract the required metadata from the table
+     # extract the required metadata from the table
     biosample_metadata = table[required_metadata].copy()
 
     # add optional metadata fields if present; rename first column
